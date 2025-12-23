@@ -22,9 +22,6 @@ function getInitialFormData(): FormData {
   };
 }
 
-// Calculate total micro-steps
-const totalMicroSteps = sections.reduce((acc, s) => acc + s.microSteps.length, 0);
-
 export default function App() {
   const [sectionIndex, setSectionIndex] = useState(0);
   const [formData, setFormData] = useState<FormData>(getInitialFormData);
@@ -226,7 +223,7 @@ export default function App() {
           <div key={currentSection.id} className="fade-in space-y-12">
 
             {/* Render all micro-steps in this section */}
-            {currentSection.microSteps.map((microStep, idx) => (
+            {currentSection.microSteps.map((microStep) => (
               <div key={microStep.id} className="space-y-6">
                 {/* Intro text */}
                 {microStep.intro && (

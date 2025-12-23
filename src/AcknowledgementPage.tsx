@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { CheckCircle2, ChevronLeft, AlertCircle, Loader2 } from 'lucide-react';
 import { sections } from './config/steps';
 import type { FormData } from './types';
@@ -56,7 +56,6 @@ function replaceVariables(content: string, data: AcknowledgementData): string {
 
 export default function AcknowledgementPage() {
   const { token } = useParams<{ token: string }>();
-  const navigate = useNavigate();
 
   const [acknowledgementData, setAcknowledgementData] = useState<AcknowledgementData | null>(null);
   const [sectionIndex, setSectionIndex] = useState(0);
