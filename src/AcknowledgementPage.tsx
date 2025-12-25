@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronLeft, AlertCircle, Loader2 } from 'lucide-react';
 import { sections } from './config/steps';
 import type { FormData } from './types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 interface AcknowledgementData {
   transfereeName: string;
