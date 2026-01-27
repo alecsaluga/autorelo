@@ -146,8 +146,31 @@ export default async function handler(req, res) {
     if (ipAddress) updateFields['IP Address'] = ipAddress;
     if (userAgent) updateFields['User Agent'] = userAgent;
 
-    // Update the record
-    await intakeTable.update(record.id, updateFields);
+    // First, update just the status (this should always work)
+    try {
+      await intakeTable.update(record.id, {
+        'Status': 'Completed',
+        'Completed At': new Date().toISOString()
+      });
+    } catch (statusErr) {
+      console.error('Failed to update status:', statusErr.message);
+      return res.status(500).json({ error: 'Failed to update status', details: statusErr.message });
+    }
+
+    // Now try to update the other fields (non-blocking - continue even if some fail)
+    const otherFields = { ...updateFields };
+    delete otherFields['Status'];
+    delete otherFields['Completed At'];
+
+    if (Object.keys(otherFields).length > 0) {
+      try {
+        await intakeTable.update(record.id, otherFields);
+      } catch (fieldsErr) {
+        // Log which fields failed but don't fail the request
+        console.warn('Some fields could not be updated:', fieldsErr.message);
+        console.warn('Attempted fields:', Object.keys(otherFields));
+      }
+    }
 
     res.status(200).json({
       success: true,
