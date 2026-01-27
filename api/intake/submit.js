@@ -109,10 +109,8 @@ export default async function handler(req, res) {
     const v3Desc = formatVehicleDescription(vehicle3);
 
     // Prepare update fields for Step 1 (Intake) - only include fields that have values
-    const updateFields = {
-      'Status': 'Completed',
-      'Completed At': new Date().toISOString(),
-    };
+    // Status is added last so other fields update first
+    const updateFields = {};
 
     // Add fields only if they have values
     if (formData.pickupAddress) updateFields['Pickup Address'] = formData.pickupAddress;
@@ -146,6 +144,10 @@ export default async function handler(req, res) {
     // Metadata
     if (ipAddress) updateFields['IP Address'] = ipAddress;
     if (userAgent) updateFields['User Agent'] = userAgent;
+
+    // Add Status last so other fields update first
+    updateFields['Completed At'] = new Date().toISOString();
+    updateFields['Status'] = 'Completed';
 
     // Update Step 1 record - try fields one by one for resilience
     const successfulFields = [];

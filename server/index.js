@@ -306,10 +306,8 @@ app.post('/api/intake/submit', async (req, res) => {
     const v3Desc = formatVehicleDescription(vehicle3);
 
     // Prepare update fields for Step 1 (Intake)
-    const updateFields = {
-      'Status': 'Completed',
-      'Completed At': new Date().toISOString(),
-    };
+    // Status is added last so other fields update first
+    const updateFields = {};
 
     // Add fields only if they have values
     if (formData.pickupAddress) updateFields['Pickup Address'] = formData.pickupAddress;
@@ -341,6 +339,10 @@ app.post('/api/intake/submit', async (req, res) => {
     // Metadata
     if (ipAddress) updateFields['IP Address'] = ipAddress;
     if (userAgent) updateFields['User Agent'] = userAgent;
+
+    // Add Status last so other fields update first
+    updateFields['Completed At'] = new Date().toISOString();
+    updateFields['Status'] = 'Completed';
 
     // Update Step 1 record - try fields one by one for resilience
     const successfulFields = [];
