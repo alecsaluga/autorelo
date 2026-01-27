@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import AcknowledgementPage from './AcknowledgementPage.tsx'
+import IntakePage from './IntakePage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -11,6 +12,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/a/:token" element={<AcknowledgementPage />} />
+        <Route path="/intake/:token" element={<IntakePage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

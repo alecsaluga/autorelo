@@ -15,6 +15,7 @@ Airtable.configure({
 
 const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
 const table = base(process.env.AIRTABLE_TABLE_ID);
+const intakeTable = base(process.env.AIRTABLE_INTAKE_TABLE_ID);
 
 // Middleware
 app.use(cors());
@@ -180,8 +181,141 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ============================================
+// INTAKE ENDPOINTS (Step 1)
+// ============================================
+
+// GET /api/intake?token=TOKEN
+// Fetches intake data by token
+app.get('/api/intake', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+
+    // Find record by token
+    const records = await intakeTable.select({
+      filterByFormula: `{Token} = '${token}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired token' });
+    }
+
+    const record = records[0];
+    const fields = record.fields;
+
+    // Check if already completed
+    if (fields['Status'] === 'Completed') {
+      return res.status(200).json({
+        status: 'completed',
+        message: 'This intake form has already been submitted.',
+        completedAt: fields['Completed At']
+      });
+    }
+
+    // Set Viewed At if not already set
+    if (!fields['Viewed At']) {
+      await intakeTable.update(record.id, {
+        'Viewed At': new Date().toISOString()
+      });
+    }
+
+    // Return safe fields only (name and email for display)
+    const responseData = {
+      transfereeName: fields['Transferee Name'] || '',
+      email: fields['Email'] || '',
+      status: fields['Status'] || ''
+    };
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error fetching intake:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/intake/submit
+// Submits the intake form
+app.post('/api/intake/submit', async (req, res) => {
+  try {
+    const { token, formData } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+
+    if (!formData) {
+      return res.status(400).json({ error: 'Form data is required' });
+    }
+
+    // Find record by token
+    const records = await intakeTable.select({
+      filterByFormula: `{Token} = '${token}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired token' });
+    }
+
+    const record = records[0];
+    const fields = record.fields;
+
+    // Idempotency: If already completed, return success
+    if (fields['Status'] === 'Completed') {
+      return res.status(200).json({
+        success: true,
+        message: 'This intake form has already been submitted.',
+        completedAt: fields['Completed At']
+      });
+    }
+
+    // Get client info
+    const ipAddress = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    // Prepare update fields
+    const updateFields = {
+      'Pickup Address': formData.pickupAddress || '',
+      'Delivery Address': formData.deliveryAddress || '',
+      'Availability Date': formData.availabilityDate || '',
+      'Vehicle Year': formData.vehicleYear || '',
+      'Vehicle Make': formData.vehicleMake || '',
+      'Vehicle Model': formData.vehicleModel || '',
+      'Vehicle Color': formData.vehicleColor || '',
+      'Plate Number': formData.plateNumber || '',
+      'VIN Number': formData.vinNumber || '',
+      'Pickup Contact Name': formData.pickupContactName || '',
+      'Pickup Contact Phone': formData.pickupContactPhone || '',
+      'Delivery Contact Name': formData.deliveryContactName || '',
+      'Delivery Contact Phone': formData.deliveryContactPhone || '',
+      'Status': 'Completed',
+      'Completed At': new Date().toISOString(),
+      'IP Address': ipAddress,
+      'User Agent': userAgent
+    };
+
+    // Update the record
+    await intakeTable.update(record.id, updateFields);
+
+    res.json({
+      success: true,
+      message: 'Intake form submitted successfully',
+      completedAt: updateFields['Completed At']
+    });
+  } catch (error) {
+    console.error('Error submitting intake:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📋 Airtable Base: ${process.env.AIRTABLE_BASE_ID}`);
-  console.log(`📊 Airtable Table: ${process.env.AIRTABLE_TABLE_ID}`);
+  console.log(`📊 Acknowledgement Table: ${process.env.AIRTABLE_TABLE_ID}`);
+  console.log(`📝 Intake Table: ${process.env.AIRTABLE_INTAKE_TABLE_ID}`);
 });
