@@ -1,8 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2, Car, MapPin, User, Calendar, Plus, Trash2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+
+// Declare google types
+declare global {
+  interface Window {
+    google: any;
+    initGooglePlaces: () => void;
+  }
+}
 
 interface IntakeData {
   transfereeName: string;
@@ -70,6 +79,87 @@ export default function IntakePage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [googleLoaded, setGoogleLoaded] = useState(false);
+
+  // Refs for address inputs
+  const pickupAddressRef = useRef<HTMLInputElement>(null);
+  const deliveryAddressRef = useRef<HTMLInputElement>(null);
+  const pickupAutocompleteRef = useRef<any>(null);
+  const deliveryAutocompleteRef = useRef<any>(null);
+
+  // Load Google Places API
+  useEffect(() => {
+    if (!GOOGLE_PLACES_API_KEY) {
+      console.warn('Google Places API key not configured');
+      return;
+    }
+
+    // Check if already loaded
+    if (window.google?.maps?.places) {
+      setGoogleLoaded(true);
+      return;
+    }
+
+    // Create callback function
+    window.initGooglePlaces = () => {
+      setGoogleLoaded(true);
+    };
+
+    // Load the script
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places&callback=initGooglePlaces`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup
+      delete window.initGooglePlaces;
+    };
+  }, []);
+
+  // Initialize autocomplete when Google is loaded and inputs are ready
+  useEffect(() => {
+    if (!googleLoaded || !window.google?.maps?.places) return;
+
+    // Initialize pickup address autocomplete
+    if (pickupAddressRef.current && !pickupAutocompleteRef.current) {
+      pickupAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        pickupAddressRef.current,
+        {
+          types: ['address'],
+          componentRestrictions: { country: 'us' },
+          fields: ['formatted_address', 'address_components']
+        }
+      );
+
+      pickupAutocompleteRef.current.addListener('place_changed', () => {
+        const place = pickupAutocompleteRef.current.getPlace();
+        if (place?.formatted_address) {
+          setFormData(prev => ({ ...prev, pickupAddress: place.formatted_address }));
+        }
+      });
+    }
+
+    // Initialize delivery address autocomplete
+    if (deliveryAddressRef.current && !deliveryAutocompleteRef.current) {
+      deliveryAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        deliveryAddressRef.current,
+        {
+          types: ['address'],
+          componentRestrictions: { country: 'us' },
+          fields: ['formatted_address', 'address_components']
+        }
+      );
+
+      deliveryAutocompleteRef.current.addListener('place_changed', () => {
+        const place = deliveryAutocompleteRef.current.getPlace();
+        if (place?.formatted_address) {
+          setFormData(prev => ({ ...prev, deliveryAddress: place.formatted_address }));
+        }
+      });
+    }
+  }, [googleLoaded, intakeData]);
 
   // Fetch intake data on mount
   useEffect(() => {
@@ -298,11 +388,13 @@ export default function IntakePage() {
                   Pick-Up Address *
                 </label>
                 <input
+                  ref={pickupAddressRef}
                   type="text"
                   value={formData.pickupAddress}
                   onChange={e => handleInputChange('pickupAddress', e.target.value)}
-                  placeholder="Full street address, city, state, zip"
+                  placeholder="Start typing an address..."
                   className="form-input"
+                  autoComplete="off"
                 />
               </div>
 
@@ -311,11 +403,13 @@ export default function IntakePage() {
                   Delivery Address *
                 </label>
                 <input
+                  ref={deliveryAddressRef}
                   type="text"
                   value={formData.deliveryAddress}
                   onChange={e => handleInputChange('deliveryAddress', e.target.value)}
-                  placeholder="Full address, or city/area if exact address unknown"
+                  placeholder="Start typing an address..."
                   className="form-input"
+                  autoComplete="off"
                 />
                 <p className="text-xs text-[var(--ai-text-muted)] mt-1">
                   If you don't have the exact address yet, provide the city or general area.
