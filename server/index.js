@@ -240,12 +240,22 @@ app.get('/api/intake', async (req, res) => {
 
 // Helper to format vehicle description
 function formatVehicleDescription(vehicle) {
-  if (!vehicle) return '';
-  return `${vehicle.year} ${vehicle.make} ${vehicle.model} - ${vehicle.color}`.trim();
+  if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) return '';
+  return `${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.color ? ' - ' + vehicle.color : ''}`.trim();
+}
+
+// Generate a random token for Step 2
+function generateToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < 16; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
 }
 
 // POST /api/intake/submit
-// Submits the intake form
+// Submits the intake form AND creates a Step 2 record
 app.post('/api/intake/submit', async (req, res) => {
   try {
     const { token, formData } = req.body;
@@ -269,14 +279,14 @@ app.post('/api/intake/submit', async (req, res) => {
     }
 
     const record = records[0];
-    const fields = record.fields;
+    const existingFields = record.fields;
 
     // Idempotency: If already completed, return success
-    if (fields['Status'] === 'Completed') {
+    if (existingFields['Status'] === 'Completed') {
       return res.status(200).json({
         success: true,
         message: 'This intake form has already been submitted.',
-        completedAt: fields['Completed At']
+        completedAt: existingFields['Completed At']
       });
     }
 
@@ -290,7 +300,12 @@ app.post('/api/intake/submit', async (req, res) => {
     const vehicle2 = vehicles[1] || {};
     const vehicle3 = vehicles[2] || {};
 
-    // Prepare update fields - only include fields that have values
+    // Build vehicle descriptions
+    const v1Desc = formatVehicleDescription(vehicle1);
+    const v2Desc = formatVehicleDescription(vehicle2);
+    const v3Desc = formatVehicleDescription(vehicle3);
+
+    // Prepare update fields for Step 1 (Intake)
     const updateFields = {
       'Status': 'Completed',
       'Completed At': new Date().toISOString(),
@@ -301,35 +316,18 @@ app.post('/api/intake/submit', async (req, res) => {
     if (formData.deliveryAddress) updateFields['Delivery Address'] = formData.deliveryAddress;
     if (formData.availabilityDate) updateFields['Availability Date'] = formData.availabilityDate;
 
-    // Vehicle 1
-    if (vehicle1.year) updateFields['Vehicle 1 Year'] = vehicle1.year;
-    if (vehicle1.make) updateFields['Vehicle 1 Make'] = vehicle1.make;
-    if (vehicle1.model) updateFields['Vehicle 1 Model'] = vehicle1.model;
-    if (vehicle1.color) updateFields['Vehicle 1 Color'] = vehicle1.color;
+    // Vehicle fields
+    if (v1Desc) updateFields['Vehicle 1 Description'] = v1Desc;
     if (vehicle1.plateNumber) updateFields['Vehicle 1 Plate'] = vehicle1.plateNumber;
     if (vehicle1.vinNumber) updateFields['Vehicle 1 VIN'] = vehicle1.vinNumber;
-    const v1Desc = formatVehicleDescription(vehicle1);
-    if (v1Desc) updateFields['Vehicle 1 Description'] = v1Desc;
 
-    // Vehicle 2
-    if (vehicle2.year) updateFields['Vehicle 2 Year'] = vehicle2.year;
-    if (vehicle2.make) updateFields['Vehicle 2 Make'] = vehicle2.make;
-    if (vehicle2.model) updateFields['Vehicle 2 Model'] = vehicle2.model;
-    if (vehicle2.color) updateFields['Vehicle 2 Color'] = vehicle2.color;
+    if (v2Desc) updateFields['Vehicle 2 Description'] = v2Desc;
     if (vehicle2.plateNumber) updateFields['Vehicle 2 Plate'] = vehicle2.plateNumber;
     if (vehicle2.vinNumber) updateFields['Vehicle 2 VIN'] = vehicle2.vinNumber;
-    const v2Desc = formatVehicleDescription(vehicle2);
-    if (v2Desc) updateFields['Vehicle 2 Description'] = v2Desc;
 
-    // Vehicle 3
-    if (vehicle3.year) updateFields['Vehicle 3 Year'] = vehicle3.year;
-    if (vehicle3.make) updateFields['Vehicle 3 Make'] = vehicle3.make;
-    if (vehicle3.model) updateFields['Vehicle 3 Model'] = vehicle3.model;
-    if (vehicle3.color) updateFields['Vehicle 3 Color'] = vehicle3.color;
+    if (v3Desc) updateFields['Vehicle 3 Description'] = v3Desc;
     if (vehicle3.plateNumber) updateFields['Vehicle 3 Plate'] = vehicle3.plateNumber;
     if (vehicle3.vinNumber) updateFields['Vehicle 3 VIN'] = vehicle3.vinNumber;
-    const v3Desc = formatVehicleDescription(vehicle3);
-    if (v3Desc) updateFields['Vehicle 3 Description'] = v3Desc;
 
     // Vehicle count
     updateFields['Vehicle Count'] = vehicles.length;
@@ -344,19 +342,7 @@ app.post('/api/intake/submit', async (req, res) => {
     if (ipAddress) updateFields['IP Address'] = ipAddress;
     if (userAgent) updateFields['User Agent'] = userAgent;
 
-    // Try to update all fields at once first
-    try {
-      await intakeTable.update(record.id, updateFields);
-      return res.json({
-        success: true,
-        message: 'Intake form submitted successfully',
-        completedAt: new Date().toISOString()
-      });
-    } catch (bulkErr) {
-      console.warn('Bulk update failed, trying individual fields:', bulkErr.message);
-    }
-
-    // If bulk update failed, try updating fields one by one
+    // Update Step 1 record - try fields one by one for resilience
     const successfulFields = [];
     const failedFields = [];
 
@@ -370,13 +356,56 @@ app.post('/api/intake/submit', async (req, res) => {
       }
     }
 
-    // Return success if we updated at least something
+    // ============================================
+    // CREATE STEP 2 RECORD
+    // ============================================
+    const step2Token = generateToken();
+
+    // Build Step 2 fields - matching the Acknowledgement table
+    const step2Fields = {
+      'Token': step2Token,
+      'Transferee Name': existingFields['Transferee Name'] || existingFields['Name'] || '',
+      'Email': existingFields['Email'] || '',
+      'Phone': formData.pickupContactPhone || '',
+      'Vehicle Count': vehicles.length,
+      'Earliest Available Delivery Date': formData.availabilityDate || ''
+    };
+
+    // Add vehicle descriptions
+    if (v1Desc) step2Fields['Vehicle 1 Description'] = v1Desc;
+    if (v2Desc) step2Fields['Vehicle 2 Description'] = v2Desc;
+    if (v3Desc) step2Fields['Vehicle 3 Description'] = v3Desc;
+
+    let step2RecordId = null;
+    let step2Error = null;
+
+    try {
+      const step2Record = await table.create(step2Fields);
+      step2RecordId = step2Record.id;
+
+      // Try to link Step 2 record ID back to Step 1
+      try {
+        await intakeTable.update(record.id, { 'Step 2 Record ID': step2RecordId });
+      } catch (e) {
+        // Field might not exist, ignore
+      }
+    } catch (err) {
+      console.error('Error creating Step 2 record:', err);
+      step2Error = err.message;
+    }
+
     res.json({
       success: true,
       message: `Intake form submitted. Updated ${successfulFields.length} fields.`,
       completedAt: new Date().toISOString(),
       updatedFields: successfulFields,
-      skippedFields: failedFields
+      skippedFields: failedFields,
+      step2: {
+        created: !!step2RecordId,
+        recordId: step2RecordId,
+        token: step2Token,
+        error: step2Error
+      }
     });
   } catch (error) {
     console.error('Error submitting intake:', error);
