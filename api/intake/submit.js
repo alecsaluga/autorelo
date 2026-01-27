@@ -6,7 +6,6 @@ Airtable.configure({
 });
 
 const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
-const intakeTable = base(process.env.AIRTABLE_INTAKE_TABLE_ID);
 
 // Helper function to get client IP
 function getClientIp(req) {
@@ -35,6 +34,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Check for required env vars
+  if (!process.env.AIRTABLE_INTAKE_TABLE_ID) {
+    console.error('Missing AIRTABLE_INTAKE_TABLE_ID environment variable');
+    return res.status(500).json({ error: 'Server configuration error: Missing intake table ID' });
+  }
+
+  const intakeTable = base(process.env.AIRTABLE_INTAKE_TABLE_ID);
 
   try {
     const { token, formData } = req.body;

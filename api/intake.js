@@ -6,9 +6,15 @@ Airtable.configure({
 });
 
 const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
-const intakeTable = base(process.env.AIRTABLE_INTAKE_TABLE_ID);
 
 export default async function handler(req, res) {
+  // Check for required env vars
+  if (!process.env.AIRTABLE_INTAKE_TABLE_ID) {
+    console.error('Missing AIRTABLE_INTAKE_TABLE_ID environment variable');
+    return res.status(500).json({ error: 'Server configuration error: Missing intake table ID' });
+  }
+
+  const intakeTable = base(process.env.AIRTABLE_INTAKE_TABLE_ID);
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -56,11 +62,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // Set Viewed At if not already set
+    // Set Viewed At if not already set (non-blocking - don't fail if field doesn't exist)
     if (!fields['Viewed At']) {
-      await intakeTable.update(record.id, {
-        'Viewed At': new Date().toISOString()
-      });
+      try {
+        await intakeTable.update(record.id, {
+          'Viewed At': new Date().toISOString()
+        });
+      } catch (updateErr) {
+        console.warn('Could not update Viewed At:', updateErr.message);
+      }
     }
 
     // Return safe fields only (name and email for display)
