@@ -74,9 +74,10 @@ export default async function handler(req, res) {
     }
 
     // Return safe fields only (name and email for display)
+    // Handle different field name cases from Airtable
     const responseData = {
-      transfereeName: fields['Transferee Name'] || '',
-      email: fields['Email'] || '',
+      transfereeName: fields['Transferee Name'] || fields['Name'] || fields['transferee name'] || '',
+      email: fields['Email'] || fields['email'] || '',
       status: fields['Status'] || ''
     };
 

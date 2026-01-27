@@ -361,12 +361,17 @@ app.post('/api/intake/submit', async (req, res) => {
     // ============================================
     const step2Token = generateToken();
 
+    // Get values from Step 1 record (handle different field name cases)
+    const transfereeName = existingFields['Transferee Name'] || existingFields['Name'] || existingFields['transferee name'] || '';
+    const email = existingFields['Email'] || existingFields['email'] || '';
+    const phone = formData.pickupContactPhone || '';
+
     // Build Step 2 fields - matching the Acknowledgement table
     const step2Fields = {
       'Token': step2Token,
-      'Transferee Name': existingFields['Transferee Name'] || existingFields['Name'] || '',
-      'Email': existingFields['Email'] || '',
-      'Phone': formData.pickupContactPhone || '',
+      'Transferee Name': transfereeName,
+      'Email': email,
+      'Phone': phone,
       'Vehicle Count': vehicles.length,
       'Earliest Available Delivery Date': formData.availabilityDate || ''
     };
@@ -375,6 +380,8 @@ app.post('/api/intake/submit', async (req, res) => {
     if (v1Desc) step2Fields['Vehicle 1 Description'] = v1Desc;
     if (v2Desc) step2Fields['Vehicle 2 Description'] = v2Desc;
     if (v3Desc) step2Fields['Vehicle 3 Description'] = v3Desc;
+
+    console.log('Creating Step 2 record with fields:', JSON.stringify(step2Fields, null, 2));
 
     let step2RecordId = null;
     let step2Error = null;
