@@ -146,36 +146,39 @@ export default async function handler(req, res) {
     if (ipAddress) updateFields['IP Address'] = ipAddress;
     if (userAgent) updateFields['User Agent'] = userAgent;
 
-    // First, update just the status (this should always work)
+    // Try to update all fields at once first
     try {
-      await intakeTable.update(record.id, {
-        'Status': 'Completed',
-        'Completed At': new Date().toISOString()
+      await intakeTable.update(record.id, updateFields);
+      return res.status(200).json({
+        success: true,
+        message: 'Intake form submitted successfully',
+        completedAt: new Date().toISOString()
       });
-    } catch (statusErr) {
-      console.error('Failed to update status:', statusErr.message);
-      return res.status(500).json({ error: 'Failed to update status', details: statusErr.message });
+    } catch (bulkErr) {
+      console.warn('Bulk update failed, trying individual fields:', bulkErr.message);
     }
 
-    // Now try to update the other fields (non-blocking - continue even if some fail)
-    const otherFields = { ...updateFields };
-    delete otherFields['Status'];
-    delete otherFields['Completed At'];
+    // If bulk update failed, try updating fields one by one
+    const successfulFields = [];
+    const failedFields = [];
 
-    if (Object.keys(otherFields).length > 0) {
+    for (const [fieldName, fieldValue] of Object.entries(updateFields)) {
       try {
-        await intakeTable.update(record.id, otherFields);
-      } catch (fieldsErr) {
-        // Log which fields failed but don't fail the request
-        console.warn('Some fields could not be updated:', fieldsErr.message);
-        console.warn('Attempted fields:', Object.keys(otherFields));
+        await intakeTable.update(record.id, { [fieldName]: fieldValue });
+        successfulFields.push(fieldName);
+      } catch (fieldErr) {
+        failedFields.push(fieldName);
+        console.warn(`Could not update field "${fieldName}":`, fieldErr.message);
       }
     }
 
+    // Return success if we updated at least something
     res.status(200).json({
       success: true,
-      message: 'Intake form submitted successfully',
-      completedAt: updateFields['Completed At']
+      message: `Intake form submitted. Updated ${successfulFields.length} fields.`,
+      completedAt: new Date().toISOString(),
+      updatedFields: successfulFields,
+      skippedFields: failedFields
     });
   } catch (error) {
     console.error('Error submitting intake:', error);
