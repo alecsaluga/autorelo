@@ -9,7 +9,7 @@ const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 declare global {
   interface Window {
     google: any;
-    initGooglePlaces: () => void;
+    initGooglePlaces?: () => void;
   }
 }
 
