@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2, Car, MapPin, User, Calendar } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Car, MapPin, User, Calendar, Plus, Trash2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -8,6 +8,15 @@ interface IntakeData {
   transfereeName: string;
   email: string;
   status: string;
+}
+
+interface Vehicle {
+  year: string;
+  make: string;
+  model: string;
+  color: string;
+  plateNumber: string;
+  vinNumber: string;
 }
 
 interface IntakeFormData {
@@ -18,13 +27,8 @@ interface IntakeFormData {
   // Availability
   availabilityDate: string;
 
-  // Vehicle info
-  vehicleYear: string;
-  vehicleMake: string;
-  vehicleModel: string;
-  vehicleColor: string;
-  plateNumber: string;
-  vinNumber: string;
+  // Vehicles (up to 3)
+  vehicles: Vehicle[];
 
   // Contacts
   pickupContactName: string;
@@ -33,17 +37,23 @@ interface IntakeFormData {
   deliveryContactPhone: string;
 }
 
+function createEmptyVehicle(): Vehicle {
+  return {
+    year: '',
+    make: '',
+    model: '',
+    color: '',
+    plateNumber: '',
+    vinNumber: '',
+  };
+}
+
 function getInitialFormData(): IntakeFormData {
   return {
     pickupAddress: '',
     deliveryAddress: '',
     availabilityDate: '',
-    vehicleYear: '',
-    vehicleMake: '',
-    vehicleModel: '',
-    vehicleColor: '',
-    plateNumber: '',
-    vinNumber: '',
+    vehicles: [createEmptyVehicle()],
     pickupContactName: '',
     pickupContactPhone: '',
     deliveryContactName: '',
@@ -97,21 +107,54 @@ export default function IntakePage() {
     fetchData();
   }, [token]);
 
-  const handleInputChange = (field: keyof IntakeFormData, value: string) => {
+  const handleInputChange = (field: keyof Omit<IntakeFormData, 'vehicles'>, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleVehicleChange = (index: number, field: keyof Vehicle, value: string) => {
+    setFormData(prev => {
+      const newVehicles = [...prev.vehicles];
+      newVehicles[index] = { ...newVehicles[index], [field]: value };
+      return { ...prev, vehicles: newVehicles };
+    });
+  };
+
+  const addVehicle = () => {
+    if (formData.vehicles.length < 3) {
+      setFormData(prev => ({
+        ...prev,
+        vehicles: [...prev.vehicles, createEmptyVehicle()]
+      }));
+    }
+  };
+
+  const removeVehicle = (index: number) => {
+    if (formData.vehicles.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        vehicles: prev.vehicles.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const isVehicleComplete = (vehicle: Vehicle) => {
+    return (
+      vehicle.year.trim() !== '' &&
+      vehicle.make.trim() !== '' &&
+      vehicle.model.trim() !== '' &&
+      vehicle.color.trim() !== '' &&
+      vehicle.plateNumber.trim() !== '' &&
+      vehicle.vinNumber.trim() !== ''
+    );
+  };
+
   const canSubmit = () => {
+    const hasCompleteVehicle = formData.vehicles.some(isVehicleComplete);
     return (
       formData.pickupAddress.trim() !== '' &&
       formData.deliveryAddress.trim() !== '' &&
       formData.availabilityDate.trim() !== '' &&
-      formData.vehicleYear.trim() !== '' &&
-      formData.vehicleMake.trim() !== '' &&
-      formData.vehicleModel.trim() !== '' &&
-      formData.vehicleColor.trim() !== '' &&
-      formData.plateNumber.trim() !== '' &&
-      formData.vinNumber.trim() !== '' &&
+      hasCompleteVehicle &&
       formData.pickupContactName.trim() !== '' &&
       formData.pickupContactPhone.trim() !== '' &&
       formData.deliveryContactName.trim() !== '' &&
@@ -129,12 +172,18 @@ export default function IntakePage() {
     setError('');
 
     try {
+      // Filter to only complete vehicles
+      const completeVehicles = formData.vehicles.filter(isVehicleComplete);
+
       const response = await fetch(`${API_URL}/api/intake/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          formData
+          formData: {
+            ...formData,
+            vehicles: completeVehicles
+          }
         }),
       });
 
@@ -299,93 +348,128 @@ export default function IntakePage() {
 
             {/* Vehicle Section */}
             <section className="space-y-4">
-              <div className="flex items-center gap-2 text-[var(--ai-accent)]">
-                <Car className="w-5 h-5" />
-                <h2 className="text-lg font-medium">Vehicle Information</h2>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                    Year *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.vehicleYear}
-                    onChange={e => handleInputChange('vehicleYear', e.target.value)}
-                    placeholder="2024"
-                    className="form-input"
-                    maxLength={4}
-                  />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[var(--ai-accent)]">
+                  <Car className="w-5 h-5" />
+                  <h2 className="text-lg font-medium">Vehicle Information</h2>
                 </div>
-                <div>
-                  <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                    Make *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.vehicleMake}
-                    onChange={e => handleInputChange('vehicleMake', e.target.value)}
-                    placeholder="Toyota"
-                    className="form-input"
-                  />
+                {formData.vehicles.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={addVehicle}
+                    className="flex items-center gap-1 text-sm text-[var(--ai-accent)] hover:underline"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Another Vehicle
+                  </button>
+                )}
+              </div>
+
+              {formData.vehicles.map((vehicle, index) => (
+                <div
+                  key={index}
+                  className="p-4 bg-[var(--ai-bg-soft)] rounded-lg border border-[var(--ai-border)] space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-[var(--ai-text)]">
+                      Vehicle {index + 1}
+                    </h3>
+                    {formData.vehicles.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeVehicle(index)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Remove vehicle"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                        Year *
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicle.year}
+                        onChange={e => handleVehicleChange(index, 'year', e.target.value)}
+                        placeholder="2024"
+                        className="form-input"
+                        maxLength={4}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                        Make *
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicle.make}
+                        onChange={e => handleVehicleChange(index, 'make', e.target.value)}
+                        placeholder="Toyota"
+                        className="form-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                        Model *
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicle.model}
+                        onChange={e => handleVehicleChange(index, 'model', e.target.value)}
+                        placeholder="Camry"
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                      Color *
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicle.color}
+                      onChange={e => handleVehicleChange(index, 'color', e.target.value)}
+                      placeholder="Silver"
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                      Plate Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicle.plateNumber}
+                      onChange={e => handleVehicleChange(index, 'plateNumber', e.target.value)}
+                      placeholder="ABC-1234"
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
+                      Full VIN Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicle.vinNumber}
+                      onChange={e => handleVehicleChange(index, 'vinNumber', e.target.value.toUpperCase())}
+                      placeholder="1HGBH41JXMN109186"
+                      className="form-input"
+                      maxLength={17}
+                    />
+                    <p className="text-xs text-[var(--ai-text-muted)] mt-1">
+                      17-character Vehicle Identification Number
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                    Model *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.vehicleModel}
-                    onChange={e => handleInputChange('vehicleModel', e.target.value)}
-                    placeholder="Camry"
-                    className="form-input"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                  Color *
-                </label>
-                <input
-                  type="text"
-                  value={formData.vehicleColor}
-                  onChange={e => handleInputChange('vehicleColor', e.target.value)}
-                  placeholder="Silver"
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                  Plate Number *
-                </label>
-                <input
-                  type="text"
-                  value={formData.plateNumber}
-                  onChange={e => handleInputChange('plateNumber', e.target.value)}
-                  placeholder="ABC-1234"
-                  className="form-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[var(--ai-text-muted)] mb-2">
-                  Full VIN Number *
-                </label>
-                <input
-                  type="text"
-                  value={formData.vinNumber}
-                  onChange={e => handleInputChange('vinNumber', e.target.value.toUpperCase())}
-                  placeholder="1HGBH41JXMN109186"
-                  className="form-input"
-                  maxLength={17}
-                />
-                <p className="text-xs text-[var(--ai-text-muted)] mt-1">
-                  17-character Vehicle Identification Number
-                </p>
-              </div>
+              ))}
             </section>
 
             {/* Contacts Section */}

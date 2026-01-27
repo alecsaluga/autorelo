@@ -16,6 +16,12 @@ function getClientIp(req) {
          'Unknown';
 }
 
+// Helper to format vehicle description
+function formatVehicleDescription(vehicle) {
+  if (!vehicle) return '';
+  return `${vehicle.year} ${vehicle.make} ${vehicle.model} - ${vehicle.color}`.trim();
+}
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -80,26 +86,65 @@ export default async function handler(req, res) {
     const ipAddress = getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
-    // Prepare update fields
+    // Extract vehicles array (handle both old format and new format)
+    const vehicles = formData.vehicles || [];
+    const vehicle1 = vehicles[0] || {};
+    const vehicle2 = vehicles[1] || {};
+    const vehicle3 = vehicles[2] || {};
+
+    // Prepare update fields - only include fields that have values
     const updateFields = {
-      'Pickup Address': formData.pickupAddress || '',
-      'Delivery Address': formData.deliveryAddress || '',
-      'Availability Date': formData.availabilityDate || '',
-      'Vehicle Year': formData.vehicleYear || '',
-      'Vehicle Make': formData.vehicleMake || '',
-      'Vehicle Model': formData.vehicleModel || '',
-      'Vehicle Color': formData.vehicleColor || '',
-      'Plate Number': formData.plateNumber || '',
-      'VIN Number': formData.vinNumber || '',
-      'Pickup Contact Name': formData.pickupContactName || '',
-      'Pickup Contact Phone': formData.pickupContactPhone || '',
-      'Delivery Contact Name': formData.deliveryContactName || '',
-      'Delivery Contact Phone': formData.deliveryContactPhone || '',
       'Status': 'Completed',
       'Completed At': new Date().toISOString(),
-      'IP Address': ipAddress,
-      'User Agent': userAgent
     };
+
+    // Add fields only if they have values (prevents Airtable errors for missing fields)
+    if (formData.pickupAddress) updateFields['Pickup Address'] = formData.pickupAddress;
+    if (formData.deliveryAddress) updateFields['Delivery Address'] = formData.deliveryAddress;
+    if (formData.availabilityDate) updateFields['Availability Date'] = formData.availabilityDate;
+
+    // Vehicle 1
+    if (vehicle1.year) updateFields['Vehicle 1 Year'] = vehicle1.year;
+    if (vehicle1.make) updateFields['Vehicle 1 Make'] = vehicle1.make;
+    if (vehicle1.model) updateFields['Vehicle 1 Model'] = vehicle1.model;
+    if (vehicle1.color) updateFields['Vehicle 1 Color'] = vehicle1.color;
+    if (vehicle1.plateNumber) updateFields['Vehicle 1 Plate'] = vehicle1.plateNumber;
+    if (vehicle1.vinNumber) updateFields['Vehicle 1 VIN'] = vehicle1.vinNumber;
+    const v1Desc = formatVehicleDescription(vehicle1);
+    if (v1Desc) updateFields['Vehicle 1 Description'] = v1Desc;
+
+    // Vehicle 2
+    if (vehicle2.year) updateFields['Vehicle 2 Year'] = vehicle2.year;
+    if (vehicle2.make) updateFields['Vehicle 2 Make'] = vehicle2.make;
+    if (vehicle2.model) updateFields['Vehicle 2 Model'] = vehicle2.model;
+    if (vehicle2.color) updateFields['Vehicle 2 Color'] = vehicle2.color;
+    if (vehicle2.plateNumber) updateFields['Vehicle 2 Plate'] = vehicle2.plateNumber;
+    if (vehicle2.vinNumber) updateFields['Vehicle 2 VIN'] = vehicle2.vinNumber;
+    const v2Desc = formatVehicleDescription(vehicle2);
+    if (v2Desc) updateFields['Vehicle 2 Description'] = v2Desc;
+
+    // Vehicle 3
+    if (vehicle3.year) updateFields['Vehicle 3 Year'] = vehicle3.year;
+    if (vehicle3.make) updateFields['Vehicle 3 Make'] = vehicle3.make;
+    if (vehicle3.model) updateFields['Vehicle 3 Model'] = vehicle3.model;
+    if (vehicle3.color) updateFields['Vehicle 3 Color'] = vehicle3.color;
+    if (vehicle3.plateNumber) updateFields['Vehicle 3 Plate'] = vehicle3.plateNumber;
+    if (vehicle3.vinNumber) updateFields['Vehicle 3 VIN'] = vehicle3.vinNumber;
+    const v3Desc = formatVehicleDescription(vehicle3);
+    if (v3Desc) updateFields['Vehicle 3 Description'] = v3Desc;
+
+    // Vehicle count
+    updateFields['Vehicle Count'] = vehicles.length;
+
+    // Contacts
+    if (formData.pickupContactName) updateFields['Pickup Contact Name'] = formData.pickupContactName;
+    if (formData.pickupContactPhone) updateFields['Pickup Contact Phone'] = formData.pickupContactPhone;
+    if (formData.deliveryContactName) updateFields['Delivery Contact Name'] = formData.deliveryContactName;
+    if (formData.deliveryContactPhone) updateFields['Delivery Contact Phone'] = formData.deliveryContactPhone;
+
+    // Metadata
+    if (ipAddress) updateFields['IP Address'] = ipAddress;
+    if (userAgent) updateFields['User Agent'] = userAgent;
 
     // Update the record
     await intakeTable.update(record.id, updateFields);
@@ -111,6 +156,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Error submitting intake:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
